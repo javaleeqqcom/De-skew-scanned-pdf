@@ -48,9 +48,10 @@ class Module:
             return None, None
 
     @staticmethod
-    def magnitude_spectrum(binary_image):
+    # 灰度图频谱化
+    def magnitude_spectrum(gray_img):
         # perform fast fourier transform of the image to find frequency information
-        f = np.fft.fft2(binary_image)  # 二维快速傅里叶变换
+        f = np.fft.fft2(gray_img)  # 二维快速傅里叶变换
         fshift = np.fft.fftshift(f)  # 将图像中的低频部分移动到图像的中心
         data = 20*np.log(np.abs(fshift)) # 傅里叶变换得到的复数取模 取对数 得到频域能量谱
         # data = np.log(np.abs(fshift))  # 傅里叶变换得到的复数取模 取对数 得到频域能量谱
@@ -59,6 +60,17 @@ class Module:
         data = data.astype(np.uint8)  # convert to 8 bit channel, back to like binary image
         # 黑白反色，处理后得到最终的频谱图
         data = cv2.bitwise_not(data)  # invert black and white pixels
+        return data
+
+    @staticmethod
+    # 频谱特征线锐化处理
+    def magnitude_spectrum0(gray_img):
+        f = np.fft.fft2(gray_img)  # 二维快速傅里叶变换
+        fshift = np.fft.fftshift(f)  # 将图像中的低频部分移动到图像的中心
+        data = 20*np.log(np.abs(fshift)) # 傅里叶变换得到的复数取模 取对数 得到频域能量谱
+        # 我们只关心频域在不同方向的强度，以此表现该方向像素点的密集程度。下面将谱归一化到 0~255 的灰度图像
+        data = (255/np.max(data))*data
+        data = data.astype(np.uint8)  # convert to 8 bit channel, back to like binary image
         return data
 
     @staticmethod
@@ -120,48 +132,27 @@ class Module:
         dst = cv2.warpAffine(img, M, (cols, rows), flags=cv2.INTER_LINEAR,borderValue=(255,255,255))
         return dst
 
-    def get_img_rot_broa(img, degree=45, filled_color=-1):
-        """
-        Desciption:
-                Get img rotated a certain degree,
-            and use some color to fill 4 corners of the new img.
-        """
+    @staticmethod
+    def spectrum_compare(source_path,output_path,name):
+        if source_path[-1]!='/':source_path=source_path+'/'
+        if output_path[-1]!='/':output_path=source_path+'/'
+        img, binary = Module.load_image(source_path+name)
+        if binary is None:return None
+        spectrum = Module.magnitude_spectrum(binary)
+        # 采用直方图二值化
+        hist = cv2.equalizeHist(spectrum)
+        plt.subplot(121)
+        plt.hist(spectrum.ravel(), 256)
+        plt.subplot(122)
+        plt.hist(hist.ravel(), 256)
+        plt.show()
+        #输出拼接
+        mdata = np.hstack((binary, hist))
+        plt.imshow(mdata, cmap=cm.gray)
+        cv2.imwrite(output_path+name, mdata)
+        return mdata
 
-        # 获取旋转后4角的填充色
-        if filled_color == -1:
-            filled_color = stats.mode([img[0, 0], img[0, -1],img[-1, 0], img[-1, -1]])#.mode[0]
-        if np.array(filled_color).shape[0] == 2:
-            if isinstance(filled_color, int):
-                filled_color = (filled_color, filled_color, filled_color)
-        else:
-            filled_color = tuple([int(i) for i in filled_color])
-        print(filled_color)
-        height, width = img.shape[:2]
 
-        # 旋转后的尺寸
-        height_new = int(width * fabs(sin(radians(degree))) +
-                         height * fabs(cos(radians(degree))))
-        width_new = int(height * fabs(sin(radians(degree))) +
-                        width * fabs(cos(radians(degree))))
-
-        mat_rotation = cv2.getRotationMatrix2D((width / 2, height / 2), degree, 1)
-
-        mat_rotation[0, 2] += (width_new - width) / 2
-        mat_rotation[1, 2] += (height_new - height) / 2
-
-        # Pay attention to the type of elements of filler_color, which should be
-        # the int in pure python, instead of those in numpy.
-        img_rotated = cv2.warpAffine(img, mat_rotation, (width_new, height_new),
-                                     borderValue=(255,255,255))
-        # # 填充四个角
-        # mask = np.zeros((height_new + 2, width_new + 2), np.uint8)
-        # mask[:] = 0
-        # seed_points = [(0, 0), (0, height_new - 1), (width_new - 1, 0),
-        #                (width_new - 1, height_new - 1)]
-        # for i in seed_points:
-        #     cv2.floodFill(img_rotated, mask, i, filled_color)
-
-        return img_rotated
 
 
 
